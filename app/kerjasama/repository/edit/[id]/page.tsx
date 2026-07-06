@@ -8,6 +8,12 @@ import { cn } from "@/lib/utils";
 import { CheckCircle } from "lucide-react";
 import { Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  apiFetch,
+  fetchManyReferences,
+  fetchReferenceOptionItems,
+  type ReferenceOption,
+} from "@/lib/api";
 import { ArrowLeft, Save, X, Eye, Loader2 } from "lucide-react";
 import {
   Select as ShadcnSelect,
@@ -22,9 +28,9 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 export default function EditRepositoryPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-useEffect(() => {
-  document.title = "SIKERMA - Repository";
-}, []);
+  useEffect(() => {
+    document.title = "SIKERMA - Repository";
+  }, []);
   /* ===== UI STATE ===== */
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
@@ -37,6 +43,21 @@ useEffect(() => {
   const [sumberPendanaan, setSumberPendanaan] = useState("");
   const [unitPenanggungJawab, setUnitPenanggungJawab] = useState("");
   const [showEditSuccess, setShowEditSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [referenceOptions, setReferenceOptions] = useState({
+    statusDokumen: [] as string[],
+    jenisDokumen: [] as string[],
+    sumberPendanaan: [] as string[],
+    unitKerja: [] as string[],
+    mitra: [] as string[],
+    klasifikasiMitra: [] as string[],
+    bidangUsaha: [] as string[],
+    negara: [] as string[],
+    bentukKegiatan: [] as string[],
+    sasaran: [] as string[],
+    indikator: [] as string[],
+  });
+  const [bentukKegiatanOptions, setBentukKegiatanOptions] = useState<ReferenceOption[]>([]);
 
   const [tanggalMulai, setTanggalMulai] = useState("");
   const [tanggalBerakhir, setTanggalBerakhir] = useState("");
@@ -44,6 +65,7 @@ useEffect(() => {
   const [judulKerjasama, setJudulKerjasama] = useState("");
   const [deskripsi, setDeskripsi] = useState("");
   const [anggaran, setAnggaran] = useState("");
+  const [namaPenanggungJawab, setNamaPenanggungJawab] = useState("");
 
   //Penggiat
   const [openPenggiat, setOpenPenggiat] = useState(false);
@@ -76,6 +98,7 @@ useEffect(() => {
   //Bentuk Kegiatan
   const [openBentukKegiatan, setOpenBentukKegiatan] = useState(false);
   const [bentukKegiatan, setBentukKegiatan] = useState({
+    bentukKegiatanId: "",
     bentuk: "",
     penerimaan: "",
     volume: "",
@@ -114,27 +137,132 @@ useEffect(() => {
   const [editingPenggiat, setEditingPenggiat] = useState<any | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<any | null>(null);
 
-  /* ===== SIMULASI FETCH DATA BY ID ===== */
+  /* ===== FETCH DATA BY ID ===== */
   useEffect(() => {
     if (!id) return;
 
-    setTimeout(() => {
-      setStatusDokumen("Aktif");
-      setJenisDokumen("IA (Implementation Arrangement) (PKS)");
-      setSkalaKerjasama("Nasional");
-      setSumberPendanaan("Dinas Propinsi");
-      setUnitPenanggungJawab("UPT Teknologi Informasi dan Komunikasi");
+    let active = true;
 
-      setTanggalMulai("2019-09-11");
-      setTanggalBerakhir("2019-09-12");
-      setNomorDokumen("122/UN26.32/TI.00.03/2019");
-      setJudulKerjasama("Fasilitasi Tes CAT");
-      setDeskripsi("Kerja sama pelaksanaan tes CAT");
-      setAnggaran("0");
+    const fetchRepository = async () => {
+      try {
+        setLoading(true);
+        const item = await apiFetch(`/repository/${id}`);
 
-      setLoading(false);
-    }, 600);
-  }, [id]);
+        if (!active) return;
+
+        setStatusDokumen(item.statusDokumen ?? item.status ?? "");
+        setJenisDokumen(item.jenisDokumen ?? item.jenis ?? "");
+        setSkalaKerjasama(item.skalaKerjasama ?? item.skala ?? "");
+        setSumberPendanaan(item.sumberPendanaan ?? item.sumberDana ?? "");
+        setUnitPenanggungJawab(item.unitPenanggungJawab ?? "");
+        setNamaPenanggungJawab(
+          item.namaPenanggungJawab ?? item.penanggungJawab ?? "",
+        );
+
+        setTanggalMulai(item.tanggalMulai ?? item.tglMulai ?? "");
+        setTanggalBerakhir(item.tanggalBerakhir ?? item.tglBerakhir ?? "");
+        setNomorDokumen(item.nomorDokumen ?? item.nomor ?? "");
+        setJudulKerjasama(item.judulKerjasama ?? item.judul ?? "");
+        setDeskripsi(item.deskripsi ?? "");
+        setAnggaran(String(item.jumlahAnggaran ?? item.anggaran ?? ""));
+
+        const dokumenUtama = Array.isArray(item.dokumen)
+          ? item.dokumen.find((doc: any) => doc.linkUrl || doc.link_url)
+          : null;
+        setLinkDokumen(dokumenUtama?.linkUrl ?? dokumenUtama?.link_url ?? "");
+
+        const bentukItems = await apiFetch(
+          `/repository/${id}/bentuk-kegiatan`,
+        );
+        const bentukPertama = Array.isArray(bentukItems)
+          ? bentukItems[0]
+          : null;
+
+        if (bentukPertama) {
+          setBentukKegiatan({
+            bentukKegiatanId: bentukPertama.bentukKegiatanId ?? bentukPertama.idBentukKegiatan ?? "",
+            bentuk: bentukPertama.bentuk ?? "",
+            penerimaan: String(bentukPertama.penerimaan ?? ""),
+            volume: String(bentukPertama.volume ?? ""),
+            satuan: bentukPertama.satuan ?? "",
+            sasaran: bentukPertama.sasaran ?? "",
+            indikator: bentukPertama.indikator ?? "",
+            keterangan: bentukPertama.keterangan ?? "",
+          });
+        }
+      } catch (error) {
+        console.error("Gagal mengambil data repository", error);
+        alert("Gagal mengambil data repository");
+        router.push("/kerjasama/my-data");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    fetchRepository();
+
+    return () => {
+      active = false;
+    };
+  }, [id, router]);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchReferenceOptionItems("bentuk-kegiatan")
+      .then((items) => {
+        if (active) setBentukKegiatanOptions(items);
+      })
+      .catch((error) => {
+        console.error("Gagal mengambil referensi bentuk kegiatan", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchManyReferences([
+      "status-kerjasama",
+      "jenis-dokumen",
+      "sumber-dana",
+      "unit-kerja",
+      "mitra",
+      "klasifikasi-mitra",
+      "bidang-usaha",
+      "countries",
+      "bentuk-kegiatan",
+      "sasaran-program",
+      "indikator",
+    ])
+      .then((refs) => {
+        if (!active) return;
+
+        setReferenceOptions({
+          statusDokumen: refs["status-kerjasama"] ?? [],
+          jenisDokumen: refs["jenis-dokumen"] ?? [],
+          sumberPendanaan: refs["sumber-dana"] ?? [],
+          unitKerja: refs["unit-kerja"] ?? [],
+          mitra: refs["mitra"] ?? [],
+          klasifikasiMitra: refs["klasifikasi-mitra"] ?? [],
+          bidangUsaha: refs["bidang-usaha"] ?? [],
+          negara: refs["countries"] ?? [],
+          bentukKegiatan: refs["bentuk-kegiatan"] ?? [],
+          sasaran: refs["sasaran-program"] ?? [],
+          indikator: refs["indikator"] ?? [],
+        });
+      })
+      .catch((error) => {
+        console.error("Gagal mengambil data referensi", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /* ===== OPTIONS ===== */
   const BENTUK_KEGIATAN_OPTIONS = [
@@ -481,13 +609,13 @@ useEffect(() => {
           label="Tahun"
           type="number"
           value={data.tahun}
-          onChange={(e) => setData({ ...data, tahun: e.target.value })}
+          onChange={(value: string) => setData({ ...data, tahun: value })}
         />
 
         <Input
           label="Jumlah (Rp)"
           value={data.jumlah}
-          onChange={(e) => setData({ ...data, jumlah: e.target.value })}
+          onChange={(value: string) => setData({ ...data, jumlah: value })}
         />
       </div>
     </div>
@@ -503,9 +631,38 @@ useEffect(() => {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
 
   /* ===== UPDATE HANDLER ===== */
-  const handleUpdate = () => {
+  const hasValue = (value: string) => value && value !== "-Pilih-";
+
+  const filePayload = (jenisLampiran: string, file: File | null) =>
+    file
+      ? {
+          jenisLampiran,
+          fileName: file.name,
+          filePath: file.name,
+        }
+      : null;
+
+  const handleUpdate = async () => {
+    if (!id || !isLinkValid) return;
+
+    const dokumen = [
+      filePayload("dokumen", fileDokumen),
+      filePayload("kontrak", fileKontrak),
+      filePayload("kak", fileKAK),
+      filePayload("rab", fileRAB),
+      linkDokumen
+        ? {
+            jenisLampiran: "link_dokumen",
+            linkUrl: linkDokumen,
+          }
+        : null,
+    ].filter(Boolean);
+
+    const termin = [termin1, termin2, termin3].filter(
+      (item) => item.bulan || item.tahun || item.jumlah,
+    );
+
     const payload = {
-      id,
       statusDokumen,
       jenisDokumen,
       skalaKerjasama,
@@ -516,12 +673,29 @@ useEffect(() => {
       deskripsi,
       sumberPendanaan,
       unitPenanggungJawab,
-      anggaran,
+      namaPenanggungJawab,
+      jumlahAnggaran: anggaran,
+      dokumen,
+      termin,
+      penggiat: hasValue(penggiat.instansi) ? penggiat : null,
+      dataPenggiat: dataPenggiat.namaMitra ? dataPenggiat : null,
+      bentukKegiatan: hasValue(bentukKegiatan.bentuk) ? bentukKegiatan : null,
     };
 
-    console.log("UPDATE PAYLOAD:", payload);
-    alert("Data repository berhasil diperbarui (simulasi)");
-    router.push("/kerjasama/my-data");
+    try {
+      setSaving(true);
+      await apiFetch(`/repository/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+
+      router.push("/kerjasama/my-data");
+    } catch (error) {
+      console.error("Gagal memperbarui repository", error);
+      alert("Gagal memperbarui data repository");
+    } finally {
+      setSaving(false);
+    }
   };
 
   /* ===== LOADING SPINNER (ELEGAN) ===== */
@@ -536,12 +710,17 @@ useEffect(() => {
   /* ===== VALIDATION ===== */
   const isLinkValid = !linkDokumen || /^https?:\/\/.+/i.test(linkDokumen);
 
-  const canSave = agree && (fileDokumen || linkDokumen) && isLinkValid;
+  const optionsWithFallback = (apiOptions: string[], fallbackOptions: string[]) =>
+    apiOptions.length > 0 ? ["-Pilih-", ...apiOptions] : fallbackOptions;
 
-  const handleSave = () => {
-    if (!canSave) return;
-    alert("Data siap disimpan (simulasi)");
-  };
+  const optionItemsWithFallback = (
+    apiOptions: ReferenceOption[],
+    fallbackOptions: string[],
+  ) => (apiOptions.length > 0 ? apiOptions : fallbackOptions);
+
+  const findBentukKegiatanLabel = (value: string | number) =>
+    bentukKegiatanOptions.find((item) => String(item.value) === String(value))?.label ??
+    String(value);
 
   /* ===== RENDER ===== */
   return (
@@ -582,8 +761,11 @@ useEffect(() => {
                   <SearchableSelect
                     label="Status Dokumen"
                     value={statusDokumen}
-                    onChange={setStatusDokumen}
-                    options={statusDokumenOptions}
+                    onChange={(value) => setStatusDokumen(String(value))}
+                    options={optionsWithFallback(
+                      referenceOptions.statusDokumen,
+                      statusDokumenOptions
+                    )}
                   />
                   <div className="grid grid-cols-2 gap-4">
                     <Input
@@ -605,8 +787,11 @@ useEffect(() => {
                   <SearchableSelect
                     label="Jenis Dokumen"
                     value={jenisDokumen}
-                    onChange={setJenisDokumen}
-                    options={jenisDokumenOptions}
+                    onChange={(value) => setJenisDokumen(String(value))}
+                    options={optionsWithFallback(
+                      referenceOptions.jenisDokumen,
+                      jenisDokumenOptions
+                    )}
                   />
                   <Input
                     label="Nomor Dokumen"
@@ -621,12 +806,12 @@ useEffect(() => {
                   <Textarea
                     label="Deskripsi Kegiatan"
                     value={deskripsi}
-                    onChange={(e: any) => setDeskripsi(e.target.value)}
+                    onChange={setDeskripsi}
                   />
                   <SearchableSelect
                     label="Skala Kerjasama"
                     value={skalaKerjasama}
-                    onChange={setSkalaKerjasama}
+                    onChange={(value) => setSkalaKerjasama(String(value))}
                     options={skalaKerjasamaOptions}
                   />
                 </Section>
@@ -713,19 +898,35 @@ useEffect(() => {
                   <SearchableSelect
                     label="Sumber Pendanaan"
                     value={sumberPendanaan}
-                    onChange={setSumberPendanaan}
-                    options={sumberPendanaanOptions}
+                    onChange={(value) => setSumberPendanaan(String(value))}
+                    options={optionsWithFallback(
+                      referenceOptions.sumberPendanaan,
+                      sumberPendanaanOptions
+                    )}
                   />
 
-                  <Input label="Jumlah Anggaran (Rp)" />
+                  <Input
+                    label="Jumlah Anggaran (Rp)"
+                    value={anggaran}
+                    onChange={setAnggaran}
+                  />
 
-                  <Input label="Nama Penanggung Jawab" />
+                  <Input
+                    label="Nama Penanggung Jawab"
+                    value={namaPenanggungJawab}
+                    onChange={setNamaPenanggungJawab}
+                  />
 
                   <SearchableSelect
                     label="Unit Penanggung Jawab"
                     value={unitPenanggungJawab}
-                    onChange={setUnitPenanggungJawab}
-                    options={unitPenanggungJawabOptions}
+                    onChange={(value) =>
+                      setUnitPenanggungJawab(String(value))
+                    }
+                    options={optionsWithFallback(
+                      referenceOptions.unitKerja,
+                      unitPenanggungJawabOptions
+                    )}
                   />
 
                   {/* ===== TERMIN PENCAIRAN ===== */}
@@ -808,12 +1009,15 @@ useEffect(() => {
                           <SearchableSelect
                             label="Klasifikasi Mitra Kerjasama"
                             size="xs"
-                            options={KLASIFIKASI_MITRA_OPTIONS}
+                            options={optionsWithFallback(
+                              referenceOptions.klasifikasiMitra,
+                              KLASIFIKASI_MITRA_OPTIONS
+                            )}
                             value={dataPenggiat.klasifikasiMitra}
                             onChange={(v) =>
                               setDataPenggiat({
                                 ...dataPenggiat,
-                                klasifikasiMitra: v,
+                                klasifikasiMitra: String(v),
                               })
                             }
                           />
@@ -834,12 +1038,15 @@ useEffect(() => {
                             <SearchableSelect
                               label="Bidang Usaha"
                               size="xs"
-                              options={BIDANG_USAHA_OPTIONS}
+                              options={optionsWithFallback(
+                                referenceOptions.bidangUsaha,
+                                BIDANG_USAHA_OPTIONS
+                              )}
                               value={dataPenggiat.bidangUsaha}
                               onChange={(v) =>
                                 setDataPenggiat({
                                   ...dataPenggiat,
-                                  bidangUsaha: v,
+                                  bidangUsaha: String(v),
                                 })
                               }
                             />
@@ -848,11 +1055,14 @@ useEffect(() => {
                               label="Negara"
                               size="xs"
                               value={dataPenggiat.negara}
-                              options={NEGARA_OPTIONS}
+                              options={optionsWithFallback(
+                                referenceOptions.negara,
+                                NEGARA_OPTIONS
+                              )}
                               onChange={(v) =>
                                 setDataPenggiat({
                                   ...dataPenggiat,
-                                  negara: v,
+                                  negara: String(v),
                                 })
                               }
                             />
@@ -938,7 +1148,12 @@ useEffect(() => {
                           >
                             Close
                           </Button>
-                          <Button size="sm">Save</Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setOpenDataPenggiat(false)}
+                          >
+                            Save
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -970,12 +1185,16 @@ useEffect(() => {
                             <SearchableSelect
                               label="Bentuk Kegiatan"
                               size="xs"
-                              value={bentukKegiatan.bentuk}
-                              options={BENTUK_KEGIATAN_OPTIONS}
+                              value={bentukKegiatan.bentukKegiatanId || bentukKegiatan.bentuk}
+                              options={optionItemsWithFallback(
+                                bentukKegiatanOptions,
+                                BENTUK_KEGIATAN_OPTIONS
+                              )}
                               onChange={(v) =>
                                 setBentukKegiatan({
                                   ...bentukKegiatan,
-                                  bentuk: v,
+                                  bentukKegiatanId: bentukKegiatanOptions.length > 0 ? String(v) : "",
+                                  bentuk: findBentukKegiatanLabel(v),
                                 })
                               }
                             />
@@ -1020,11 +1239,14 @@ useEffect(() => {
                               label="Sasaran"
                               size="xs"
                               value={bentukKegiatan.sasaran}
-                              options={SASARAN_OPTIONS}
+                              options={optionsWithFallback(
+                                referenceOptions.sasaran,
+                                SASARAN_OPTIONS
+                              )}
                               onChange={(v) =>
                                 setBentukKegiatan({
                                   ...bentukKegiatan,
-                                  sasaran: v,
+                                  sasaran: String(v),
                                 })
                               }
                             />
@@ -1034,11 +1256,14 @@ useEffect(() => {
                               size="xs"
                               required={false}
                               value={bentukKegiatan.indikator}
-                              options={INDIKATOR_OPTIONS}
+                              options={optionsWithFallback(
+                                referenceOptions.indikator,
+                                INDIKATOR_OPTIONS
+                              )}
                               onChange={(v) =>
                                 setBentukKegiatan({
                                   ...bentukKegiatan,
-                                  indikator: v,
+                                  indikator: String(v),
                                 })
                               }
                             />
@@ -1072,7 +1297,12 @@ useEffect(() => {
                           >
                             Close
                           </Button>
-                          <Button size="sm">Save</Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setOpenBentukKegiatan(false)}
+                          >
+                            Save
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -1105,12 +1335,15 @@ useEffect(() => {
                           <SearchableSelect
                             label="Nama Instansi"
                             size="xs"
-                            options={namaInstansiOptions}
+                            options={optionsWithFallback(
+                              referenceOptions.mitra,
+                              namaInstansiOptions
+                            )}
                             value={editingPenggiat.instansi}
                             onChange={(v: any) =>
                               setEditingPenggiat({
                                 ...editingPenggiat,
-                                instansi: v,
+                                instansi: String(v),
                               })
                             }
                           />
@@ -1354,8 +1587,9 @@ useEffect(() => {
 
             {/* ACTION */}
             <div className="border-t pt-8 flex justify-center">
-              <Button className="px-10" onClick={handleUpdate}>
-                <Save className="w-4 h-4 mr-2" /> Update
+              <Button className="px-10" onClick={handleUpdate} disabled={saving}>
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? "Updating..." : "Update"}
               </Button>
             </div>
           </div>
@@ -1384,8 +1618,8 @@ function Input({ label, type = "text", value, onChange }: any) {
       <label className="text-sm font-medium">{label}</label>
       <input
         type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value ?? ""}
+        onChange={(e) => onChange?.(e.target.value)}
         className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
       />
     </div>
@@ -1397,8 +1631,8 @@ function Textarea({ label, value, onChange }: any) {
     <div className="space-y-1">
       <label className="text-sm font-medium">{label}</label>
       <textarea
-        value={value}
-        onChange={onChange}
+        value={value ?? ""}
+        onChange={(e) => onChange?.(e.target.value)}
         className="w-full border rounded-md px-3 py-2 text-sm min-h-[90px]"
       />
     </div>
@@ -1454,7 +1688,7 @@ function ModalInput({
         {label} <span className="text-red-500">*</span>
       </label>
       <input
-        value={value}
+        value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full border rounded-md px-3 py-2 text-sm

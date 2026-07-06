@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api";
 import {
   RefreshCcw,
   Plus,
@@ -22,12 +23,12 @@ import {
 /* ================= TYPES ================= */
 
 type RepositoryDoc = {
-  id: number;
-  jenis: "MoU" | "MoA" | "IA";
+  id: string;
+  jenis: string;
   nomor: string;
   judul: string;
   expired: string;
-  status: "Aktif" | "Tidak Aktif";
+  status: string;
   periode: string;
   deskripsi: string;
   unitPelaksana: string;
@@ -39,29 +40,6 @@ type RepositoryDoc = {
   paraPenggiat: string; // ⬅️ TAMBAHAN
 };
 
-/* ================= DUMMY DATA ================= */
-
-const DUMMY_DATA: RepositoryDoc[] = Array.from({ length: 120 }, (_, i) => ({
-  id: i + 1,
-  jenis: i % 3 === 0 ? "MoU" : i % 3 === 1 ? "MoA" : "IA",
-  nomor: `UN26/${1000 + i}/KS/202${i % 4}`,
-  judul: `Kerja Sama Akademik Universitas Lampung ${i + 1}`,
-  expired: `18/12/203${i % 5}`,
-  status: "Aktif",
-  periode: "18-12-2025 s.d 18-12-2030",
-  deskripsi:
-    "Nota kesepahaman terkait pengembangan pendidikan, penelitian, dan pengabdian kepada masyarakat.",
-  unitPelaksana: "Universitas Lampung",
-  penanggungJawab: "Biro Perencanaan dan Hubungan Masyarakat",
-  sumberDana: "Lainnya",
-  anggaran: "0,00",
-  bentukKegiatan: "Pengabdian Kepada Masyarakat",
-  skala: "Nasional",
-  paraPenggiat:
-    "Pihak Ke-1 | Badan Strategi Kebijakan dan Pendidikan Pelatihan Hukum dan Peradilan Mahkamah Agung Republik Indonesia | Dr. H. Syamsul Arief, S.H., M.H.\n" +
-    "Pihak Ke-2 | Universitas Lampung | Lusmeilia Afriani",
-}));
-
 /* ================= PAGE ================= */
 
 export default function RepositoryPage() {
@@ -72,20 +50,35 @@ export default function RepositoryPage() {
   const [limit, setLimit] = useState(10);
   const [page, setPage] = useState(1);
 
+  const [data, setData] = useState<RepositoryDoc[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState<RepositoryDoc | null>(null);
-useEffect(() => {
-  document.title = "SIKERMA - Repository";
-}, []);
+  useEffect(() => {
+    document.title = "SIKERMA - Repository";
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const json = await apiFetch("/repository");
+      setData(Array.isArray(json) ? json : []);
+    } catch (error) {
+      console.error("Gagal mengambil repository", error);
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* ================= FILTER ================= */
 
   const filteredData = useMemo(() => {
-    return DUMMY_DATA.filter((item) =>
+    return data.filter((item) =>
       `${item.jenis} ${item.nomor} ${item.judul} ${item.status}`
         .toLowerCase()
         .includes(search.toLowerCase()),
     );
-  }, [search]);
+  }, [search, data]);
 
   const totalPages = Math.ceil(filteredData.length / limit);
 
@@ -184,7 +177,26 @@ useEffect(() => {
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedData.map((item, index) => (
+                      {loading ? (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="px-3 py-10 text-center text-muted-foreground"
+                          >
+                            Memuat data repository...
+                          </td>
+                        </tr>
+                      ) : paginatedData.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="px-3 py-10 text-center text-muted-foreground"
+                          >
+                            No data available in table
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedData.map((item, index) => (
                         <tr key={item.id} className="border-b">
                           <td className="px-3 py-2 text-center">
                             {(page - 1) * limit + index + 1}
@@ -214,7 +226,8 @@ useEffect(() => {
                             </Button>
                           </td>
                         </tr>
-                      ))}
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -247,7 +260,7 @@ useEffect(() => {
                           key={i}
                           size="sm"
                           variant={p === page ? "default" : "outline"}
-                          onClick={() => setPage(p)}
+                          onClick={() => setPage(p as number)}
                         >
                           {p}
                         </Button>
@@ -257,7 +270,7 @@ useEffect(() => {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={page === totalPages}
+                      disabled={page === totalPages || totalPages === 0}
                       onClick={() => setPage((p) => p + 1)}
                     >
                       Next

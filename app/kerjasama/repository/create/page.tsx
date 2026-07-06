@@ -6,6 +6,12 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  apiFetch,
+  fetchManyReferences,
+  fetchReferenceOptionItems,
+  type ReferenceOption,
+} from "@/lib/api";
 import { ArrowLeft, Save, X, Eye, Loader2 } from "lucide-react";
 import {
   Select as ShadcnSelect,
@@ -29,6 +35,86 @@ export default function CreateRepositoryPage() {
   const [skalaKerjasama, setSkalaKerjasama] = useState("");
   const [sumberPendanaan, setSumberPendanaan] = useState("");
   const [unitPenanggungJawab, setUnitPenanggungJawab] = useState("");
+  const [tanggalMulai, setTanggalMulai] = useState("");
+  const [tanggalBerakhir, setTanggalBerakhir] = useState("");
+  const [nomorDokumen, setNomorDokumen] = useState("");
+  const [judulKerjasama, setJudulKerjasama] = useState("");
+  const [deskripsi, setDeskripsi] = useState("");
+  const [jumlahAnggaran, setJumlahAnggaran] = useState("");
+  const [namaPenanggungJawab, setNamaPenanggungJawab] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [referenceOptions, setReferenceOptions] = useState({
+    statusDokumen: [] as string[],
+    jenisDokumen: [] as string[],
+    sumberPendanaan: [] as string[],
+    unitKerja: [] as string[],
+    mitra: [] as string[],
+    klasifikasiMitra: [] as string[],
+    bidangUsaha: [] as string[],
+    negara: [] as string[],
+    bentukKegiatan: [] as string[],
+    sasaran: [] as string[],
+    indikator: [] as string[],
+  });
+  const [bentukKegiatanOptions, setBentukKegiatanOptions] = useState<ReferenceOption[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchManyReferences([
+      "status-kerjasama",
+      "jenis-dokumen",
+      "sumber-dana",
+      "unit-kerja",
+      "mitra",
+      "klasifikasi-mitra",
+      "bidang-usaha",
+      "countries",
+      "bentuk-kegiatan",
+      "sasaran-program",
+      "indikator",
+    ])
+      .then((refs) => {
+        if (!active) return;
+
+        setReferenceOptions({
+          statusDokumen: refs["status-kerjasama"] ?? [],
+          jenisDokumen: refs["jenis-dokumen"] ?? [],
+          sumberPendanaan: refs["sumber-dana"] ?? [],
+          unitKerja: refs["unit-kerja"] ?? [],
+          mitra: refs["mitra"] ?? [],
+          klasifikasiMitra: refs["klasifikasi-mitra"] ?? [],
+          bidangUsaha: refs["bidang-usaha"] ?? [],
+          negara: refs["countries"] ?? [],
+          bentukKegiatan: refs["bentuk-kegiatan"] ?? [],
+          sasaran: refs["sasaran-program"] ?? [],
+          indikator: refs["indikator"] ?? [],
+        });
+      })
+      .catch((error) => {
+        console.error("Gagal mengambil data referensi", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchReferenceOptionItems("bentuk-kegiatan")
+      .then((items) => {
+        if (active) setBentukKegiatanOptions(items);
+      })
+      .catch((error) => {
+        console.error("Gagal mengambil referensi bentuk kegiatan", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   //Penggiat
   const [openPenggiat, setOpenPenggiat] = useState(false);
@@ -61,6 +147,7 @@ export default function CreateRepositoryPage() {
   //Bentuk Kegiatan
   const [openBentukKegiatan, setOpenBentukKegiatan] = useState(false);
   const [bentukKegiatan, setBentukKegiatan] = useState({
+    bentukKegiatanId: "",
     bentuk: "",
     penerimaan: "",
     volume: "",
@@ -414,13 +501,13 @@ export default function CreateRepositoryPage() {
           label="Tahun"
           type="number"
           value={data.tahun}
-          onChange={(e) => setData({ ...data, tahun: e.target.value })}
+          onChange={(value: string) => setData({ ...data, tahun: value })}
         />
 
         <Input
           label="Jumlah (Rp)"
           value={data.jumlah}
-          onChange={(e) => setData({ ...data, jumlah: e.target.value })}
+          onChange={(value: string) => setData({ ...data, jumlah: value })}
         />
       </div>
     </div>
@@ -442,9 +529,80 @@ export default function CreateRepositoryPage() {
 
   const canSave = agree && (fileDokumen || linkDokumen) && isLinkValid;
 
-  const handleSave = () => {
+  const optionsWithFallback = (apiOptions: string[], fallbackOptions: string[]) =>
+    apiOptions.length > 0 ? ["-Pilih-", ...apiOptions] : fallbackOptions;
+
+  const optionItemsWithFallback = (
+    apiOptions: ReferenceOption[],
+    fallbackOptions: string[],
+  ) => (apiOptions.length > 0 ? apiOptions : fallbackOptions);
+
+  const findBentukKegiatanLabel = (value: string | number) =>
+    bentukKegiatanOptions.find((item) => String(item.value) === String(value))?.label ??
+    String(value);
+
+  const hasValue = (value: unknown) =>
+    String(value ?? "").trim() !== "" && value !== "-Pilih-";
+
+  const filePayload = (jenis: string, file: File | null) =>
+    file
+      ? {
+          jenis,
+          fileName: file.name,
+          fileSize: file.size,
+        }
+      : null;
+
+  const handleSave = async () => {
     if (!canSave) return;
-    alert("Data siap disimpan (simulasi)");
+
+    const dokumen = [
+      filePayload("dokumen", fileDokumen),
+      filePayload("kontrak", fileKontrak),
+      filePayload("kak", fileKAK),
+      filePayload("rab", fileRAB),
+    ].filter(Boolean);
+
+    const termin = [termin1, termin2, termin3].filter(
+      (item) => hasValue(item.bulan) || hasValue(item.tahun) || hasValue(item.jumlah),
+    );
+
+    const payload = {
+      statusDokumen,
+      jenisDokumen,
+      tanggalMulai,
+      tanggalBerakhir,
+      nomorDokumen,
+      judulKerjasama,
+      deskripsi,
+      skalaKerjasama,
+      sumberPendanaan,
+      jumlahAnggaran,
+      unitPenanggungJawab,
+      namaPenanggungJawab,
+      linkDokumen,
+      dokumen,
+      termin,
+      penggiat: hasValue(penggiat.instansi) ? [penggiat] : [],
+      dataPenggiat: hasValue(dataPenggiat.namaMitra) ? [dataPenggiat] : [],
+      bentukKegiatan: hasValue(bentukKegiatan.bentuk) ? [bentukKegiatan] : [],
+      crudStatus: "draft",
+      syncStatus: "local",
+    };
+
+    try {
+      setSaving(true);
+      await apiFetch("/repository", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      router.push("/kerjasama/my-data");
+    } catch (error) {
+      console.error("Gagal menyimpan repository", error);
+      alert("Gagal menyimpan repository");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -489,12 +647,25 @@ export default function CreateRepositoryPage() {
                   <SearchableSelect
                     label="Status Dokumen"
                     value={statusDokumen}
-                    onChange={setStatusDokumen}
-                    options={statusDokumenOptions}
+                    onChange={(value) => setStatusDokumen(String(value))}
+                    options={optionsWithFallback(
+                      referenceOptions.statusDokumen,
+                      statusDokumenOptions
+                    )}
                   />
                   <div className="grid grid-cols-2 gap-4">
-                    <Input label="Tanggal Mulai" type="date" />
-                    <Input label="Tanggal Berakhir" type="date" />
+                    <Input
+                      label="Tanggal Mulai"
+                      type="date"
+                      value={tanggalMulai}
+                      onChange={setTanggalMulai}
+                    />
+                    <Input
+                      label="Tanggal Berakhir"
+                      type="date"
+                      value={tanggalBerakhir}
+                      onChange={setTanggalBerakhir}
+                    />
                   </div>
                 </Section>
 
@@ -502,16 +673,31 @@ export default function CreateRepositoryPage() {
                   <SearchableSelect
                     label="Jenis Dokumen"
                     value={jenisDokumen}
-                    onChange={setJenisDokumen}
-                    options={jenisDokumenOptions}
+                    onChange={(value) => setJenisDokumen(String(value))}
+                    options={optionsWithFallback(
+                      referenceOptions.jenisDokumen,
+                      jenisDokumenOptions
+                    )}
                   />
-                  <Input label="Nomor Dokumen" />
-                  <Input label="Judul Kerjasama" />
-                  <Textarea label="Deskripsi Kegiatan" />
+                  <Input
+                    label="Nomor Dokumen"
+                    value={nomorDokumen}
+                    onChange={setNomorDokumen}
+                  />
+                  <Input
+                    label="Judul Kerjasama"
+                    value={judulKerjasama}
+                    onChange={setJudulKerjasama}
+                  />
+                  <Textarea
+                    label="Deskripsi Kegiatan"
+                    value={deskripsi}
+                    onChange={setDeskripsi}
+                  />
                   <SearchableSelect
                     label="Skala Kerjasama"
                     value={skalaKerjasama}
-                    onChange={setSkalaKerjasama}
+                    onChange={(value) => setSkalaKerjasama(String(value))}
                     options={skalaKerjasamaOptions}
                   />
                 </Section>
@@ -598,19 +784,35 @@ export default function CreateRepositoryPage() {
                   <SearchableSelect
                     label="Sumber Pendanaan"
                     value={sumberPendanaan}
-                    onChange={setSumberPendanaan}
-                    options={sumberPendanaanOptions}
+                    onChange={(value) => setSumberPendanaan(String(value))}
+                    options={optionsWithFallback(
+                      referenceOptions.sumberPendanaan,
+                      sumberPendanaanOptions
+                    )}
                   />
 
-                  <Input label="Jumlah Anggaran (Rp)" />
+                  <Input
+                    label="Jumlah Anggaran (Rp)"
+                    value={jumlahAnggaran}
+                    onChange={setJumlahAnggaran}
+                  />
 
-                  <Input label="Nama Penanggung Jawab" />
+                  <Input
+                    label="Nama Penanggung Jawab"
+                    value={namaPenanggungJawab}
+                    onChange={setNamaPenanggungJawab}
+                  />
 
                   <SearchableSelect
                     label="Unit Penanggung Jawab"
                     value={unitPenanggungJawab}
-                    onChange={setUnitPenanggungJawab}
-                    options={unitPenanggungJawabOptions}
+                    onChange={(value) =>
+                      setUnitPenanggungJawab(String(value))
+                    }
+                    options={optionsWithFallback(
+                      referenceOptions.unitKerja,
+                      unitPenanggungJawabOptions
+                    )}
                   />
 
                   {/* ===== TERMIN PENCAIRAN ===== */}
@@ -687,11 +889,11 @@ export default function CreateRepositoryPage() {
               <div className="flex justify-center">
                 <Button
                   className="px-10"
-                  disabled={!canSave}
+                  disabled={!canSave || saving}
                   onClick={handleSave}
                 >
                   <Save className="w-4 h-4 mr-2" />
-                  Save
+                  {saving ? "Saving..." : "Save"}
                 </Button>
               </div>
             </div>
@@ -744,8 +946,13 @@ export default function CreateRepositoryPage() {
                     label="Nama Instansi"
                     size="xs"
                     value={penggiat.instansi}
-                    onChange={(v) => setPenggiat({ ...penggiat, instansi: v })}
-                    options={namaInstansiOptions}
+                    onChange={(v) =>
+                      setPenggiat({ ...penggiat, instansi: String(v) })
+                    }
+                    options={optionsWithFallback(
+                      referenceOptions.mitra,
+                      namaInstansiOptions
+                    )}
                   />
 
                   <ModalInput
@@ -808,7 +1015,9 @@ export default function CreateRepositoryPage() {
                   >
                     Close
                   </Button>
-                  <Button size="sm">Save</Button>
+                  <Button size="sm" onClick={() => setOpenPenggiat(false)}>
+                    Save
+                  </Button>
                 </div>
               </div>
             </div>
@@ -854,10 +1063,16 @@ export default function CreateRepositoryPage() {
                   <SearchableSelect
                     label="Klasifikasi Mitra Kerjasama"
                     size="xs"
-                    options={KLASIFIKASI_MITRA_OPTIONS}
+                    options={optionsWithFallback(
+                      referenceOptions.klasifikasiMitra,
+                      KLASIFIKASI_MITRA_OPTIONS
+                    )}
                     value={dataPenggiat.klasifikasiMitra}
                     onChange={(v) =>
-                      setDataPenggiat({ ...dataPenggiat, klasifikasiMitra: v })
+                      setDataPenggiat({
+                        ...dataPenggiat,
+                        klasifikasiMitra: String(v),
+                      })
                     }
                   />
 
@@ -874,10 +1089,16 @@ export default function CreateRepositoryPage() {
                     <SearchableSelect
                       label="Bidang Usaha"
                       size="xs"
-                      options={BIDANG_USAHA_OPTIONS}
+                      options={optionsWithFallback(
+                        referenceOptions.bidangUsaha,
+                        BIDANG_USAHA_OPTIONS
+                      )}
                       value={dataPenggiat.bidangUsaha}
                       onChange={(v) =>
-                        setDataPenggiat({ ...dataPenggiat, bidangUsaha: v })
+                        setDataPenggiat({
+                          ...dataPenggiat,
+                          bidangUsaha: String(v),
+                        })
                       }
                     />
 
@@ -885,11 +1106,14 @@ export default function CreateRepositoryPage() {
                       label="Negara"
                       size="xs"
                       value={dataPenggiat.negara}
-                      options={NEGARA_OPTIONS}
+                      options={optionsWithFallback(
+                        referenceOptions.negara,
+                        NEGARA_OPTIONS
+                      )}
                       onChange={(v) =>
                         setDataPenggiat({
                           ...dataPenggiat,
-                          negara: v,
+                          negara: String(v),
                         })
                       }
                     />
@@ -972,7 +1196,9 @@ export default function CreateRepositoryPage() {
                   >
                     Close
                   </Button>
-                  <Button size="sm">Save</Button>
+                  <Button size="sm" onClick={() => setOpenDataPenggiat(false)}>
+                    Save
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1019,10 +1245,17 @@ export default function CreateRepositoryPage() {
                 <SearchableSelect
                   label="Bentuk Kegiatan"
                   size="xs"
-                  value={bentukKegiatan.bentuk}
-                  options={BENTUK_KEGIATAN_OPTIONS}
+                  value={bentukKegiatan.bentukKegiatanId || bentukKegiatan.bentuk}
+                  options={optionItemsWithFallback(
+                    bentukKegiatanOptions,
+                    BENTUK_KEGIATAN_OPTIONS
+                  )}
                   onChange={(v) =>
-                    setBentukKegiatan({ ...bentukKegiatan, bentuk: v })
+                    setBentukKegiatan({
+                      ...bentukKegiatan,
+                      bentukKegiatanId: bentukKegiatanOptions.length > 0 ? String(v) : "",
+                      bentuk: findBentukKegiatanLabel(v),
+                    })
                   }
                 />
 
@@ -1057,9 +1290,15 @@ export default function CreateRepositoryPage() {
                   label="Sasaran"
                   size="xs"
                   value={bentukKegiatan.sasaran}
-                  options={SASARAN_OPTIONS}
+                  options={optionsWithFallback(
+                    referenceOptions.sasaran,
+                    SASARAN_OPTIONS
+                  )}
                   onChange={(v) =>
-                    setBentukKegiatan({ ...bentukKegiatan, sasaran: v })
+                    setBentukKegiatan({
+                      ...bentukKegiatan,
+                      sasaran: String(v),
+                    })
                   }
                 />
 
@@ -1068,9 +1307,15 @@ export default function CreateRepositoryPage() {
                   size="xs"
                   required={false}
                   value={bentukKegiatan.indikator}
-                  options={INDIKATOR_OPTIONS}
+                  options={optionsWithFallback(
+                    referenceOptions.indikator,
+                    INDIKATOR_OPTIONS
+                  )}
                   onChange={(v) =>
-                    setBentukKegiatan({ ...bentukKegiatan, indikator: v })
+                    setBentukKegiatan({
+                      ...bentukKegiatan,
+                      indikator: String(v),
+                    })
                   }
                 />
               </div>
@@ -1101,7 +1346,9 @@ export default function CreateRepositoryPage() {
               >
                 Close
               </Button>
-              <Button size="sm">Save</Button>
+              <Button size="sm" onClick={() => setOpenBentukKegiatan(false)}>
+                Save
+              </Button>
             </div>
           </div>
         </div>
@@ -1147,7 +1394,7 @@ function Input({ label, type = "text", value, onChange, error }: any) {
       <label className="text-sm font-medium">{label}</label>
       <input
         type={type}
-        value={value}
+        value={value ?? ""}
         onChange={(e) => onChange?.(e.target.value)}
         className={cn(
           "w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40",
@@ -1159,11 +1406,15 @@ function Input({ label, type = "text", value, onChange, error }: any) {
   );
 }
 
-function Textarea({ label }: any) {
+function Textarea({ label, value, onChange }: any) {
   return (
     <div className="space-y-1">
       <label className="text-sm font-medium">{label}</label>
-      <textarea className="w-full border rounded-md px-3 py-2 text-sm min-h-[90px]" />
+      <textarea
+        value={value ?? ""}
+        onChange={(e) => onChange?.(e.target.value)}
+        className="w-full border rounded-md px-3 py-2 text-sm min-h-[90px]"
+      />
     </div>
   );
 }
@@ -1217,7 +1468,7 @@ function ModalInput({
         {label} <span className="text-red-500">*</span>
       </label>
       <input
-        value={value}
+        value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full border rounded-md px-3 py-2 text-sm
@@ -1244,7 +1495,7 @@ function ModalSelect({
         {label} <span className="text-red-500">*</span>
       </label>
       <select
-        value={value}
+        value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         className="w-full border rounded-md px-3 py-2 text-sm
         focus:outline-none focus:ring-2 focus:ring-primary/40"

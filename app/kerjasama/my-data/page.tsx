@@ -6,18 +6,19 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api";
 import { Download, List, Trash2, Pencil } from "lucide-react";
 import { RefreshCcw, Plus, ArrowLeft, X } from "lucide-react";
 
 /* ================= TYPES ================= */
 
 type RepositoryDoc = {
-  id: number;
-  jenis: "MoU" | "MoA" | "IA";
+  id: string;
+  jenis: string;
   nomor: string;
   judul: string;
   tglMulai: string;
-  status: "Aktif" | "Tidak Aktif";
+  status: string;
 
   periode?: string;
   deskripsi?: string;
@@ -36,7 +37,7 @@ type RepositoryDoc = {
 
 const DUMMY_DATA: RepositoryDoc[] = [
   {
-    id: 1,
+    id: "1",
     jenis: "IA",
     nomor: "122/UN26.32/TI.00.03/2019",
     judul:
@@ -59,12 +60,14 @@ const DUMMY_DATA: RepositoryDoc[] = [
 
 /* ================= STATUS BADGE ================= */
 
-function StatusBadge({ status }: { status: "Aktif" | "Tidak Aktif" }) {
+function StatusBadge({ status }: { status: string }) {
+  const isActive = status.toLowerCase() === "aktif";
+
   return (
     <span
       className={cn(
         "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-        status === "Aktif"
+        isActive
           ? "bg-green-600 text-white border border-green-600"
           : "bg-gray-600 text-white border border-gray-600",
       )}
@@ -80,6 +83,8 @@ export default function MyRepositoryPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<RepositoryDoc | null>(null);
+  const [data, setData] = useState<RepositoryDoc[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(10);
@@ -88,21 +93,47 @@ export default function MyRepositoryPage() {
   const [deleteDoc, setDeleteDoc] = useState<RepositoryDoc | null>(null);
   useEffect(() => {
     document.title = "SIKERMA - My Repository";
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      const json = await apiFetch("/repository/mydata");
+      setData(Array.isArray(json) ? json : []);
+    } catch (error) {
+      console.error("Gagal mengambil repository my-data", error);
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDownload = (doc: RepositoryDoc) => {
     alert(`Download dokumen: ${doc.nomor}`);
   };
 
+  const handleDelete = async () => {
+    if (!deleteDoc) return;
+
+    try {
+      await apiFetch(`/repository/${deleteDoc.id}`, { method: "DELETE" });
+      setData((prev) => prev.filter((item) => item.id !== deleteDoc.id));
+      setDeleteDoc(null);
+    } catch (error) {
+      console.error("Gagal menghapus repository", error);
+      alert("Gagal menghapus dokumen");
+    }
+  };
+
   /* ================= FILTER ================= */
 
   const filteredData = useMemo(() => {
-    return DUMMY_DATA.filter((item) =>
+    return data.filter((item) =>
       `${item.jenis} ${item.nomor} ${item.judul} ${item.status}`
         .toLowerCase()
         .includes(search.toLowerCase()),
     );
-  }, [search]);
+  }, [search, data]);
 
   const totalPages = Math.ceil(filteredData.length / limit);
 
@@ -187,7 +218,26 @@ export default function MyRepositoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedData.map((item, index) => (
+                    {loading ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="px-3 py-10 text-center text-muted-foreground"
+                        >
+                          Memuat data repository...
+                        </td>
+                      </tr>
+                    ) : paginatedData.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="px-3 py-10 text-center text-muted-foreground"
+                        >
+                          No data available in table
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedData.map((item, index) => (
                       <tr
                         key={item.id}
                         className="border-b hover:bg-muted/40 transition-colors"
@@ -271,7 +321,8 @@ export default function MyRepositoryPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -301,7 +352,7 @@ export default function MyRepositoryPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={page === totalPages}
+                    disabled={page === totalPages || totalPages === 0}
                     onClick={() => setPage((p) => p + 1)}
                   >
                     Next
@@ -424,10 +475,7 @@ export default function MyRepositoryPage() {
               </Button>
               <Button
                 variant="destructive"
-                onClick={() => {
-                  alert(`Dokumen ${deleteDoc.nomor} dihapus`);
-                  setDeleteDoc(null);
-                }}
+                onClick={handleDelete}
               >
                 Hapus
               </Button>

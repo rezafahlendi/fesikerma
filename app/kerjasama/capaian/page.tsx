@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { apiFetch } from "@/lib/api";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,18 @@ type RealisasiData = {
   };
 };
 
+type CapaianResponse = {
+  tahun: number;
+  target: Partial<TargetData> | null;
+  realisasi: {
+    mou?: number;
+    moa?: number;
+    ia?: number;
+    aktif?: number;
+    kegiatan?: number;
+  };
+};
+
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max === 0 ? 0 : Math.min(100, Math.round((value / max) * 100));
   return (
@@ -80,22 +93,31 @@ export default function CapaianKerjasamaPage() {
   const [targetData, setTargetData] = useState<TargetData[]>([]);
   const [repoData, setRepoData] = useState<RepoData[]>([]);
   const [realisasiData, setRealisasiData] = useState<RealisasiData[]>([]);
+  const [capaianData, setCapaianData] = useState<CapaianResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [activeYear, setActiveYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
     document.title = "SIKERMA - Capaian Kerjasama";
     Promise.all([
-      fetch("/api/target-kerjasama").then((r) => r.json()),
-      fetch("/api/repository/mydata", { credentials: "include" }).then((r) => r.json()),
-      fetch("/api/realisasi").then((r) => r.json()),
+      apiFetch("/target-kerjasama"),
+      apiFetch("/repository/mydata"),
+      apiFetch("/realisasi"),
     ])
       .then(([targets, repos, realizasis]) => {
         if (Array.isArray(targets)) setTargetData(targets);
         if (Array.isArray(repos)) setRepoData(repos);
         if (Array.isArray(realizasis)) setRealisasiData(realizasis);
       })
+      .catch((err) => setError(err instanceof Error ? err.message : "Gagal memuat capaian"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    apiFetch(`/capaian?tahun=${activeYear}`)
+      .then((res) => setCapaianData(res))
+      .catch((err) => setError(err instanceof Error ? err.message : "Gagal memuat capaian"));
+  }, [activeYear]);
 
   const availableYears = useMemo(() => {
     const fromTargets = targetData.map((t) => t.tahun);
@@ -109,14 +131,14 @@ export default function CapaianKerjasamaPage() {
   const target = targetData.find((t) => t.tahun === activeYear);
   const reposThisYear = repoData.filter((r) => new Date(r.tanggalMulai).getFullYear() === activeYear);
 
-  const targetMou = target?.mou ?? 0;
-  const targetMoa = target?.moa ?? 0;
-  const targetIa = target?.ia ?? 0;
+  const targetMou = capaianData?.target?.mou ?? target?.mou ?? 0;
+  const targetMoa = capaianData?.target?.moa ?? target?.moa ?? 0;
+  const targetIa = capaianData?.target?.ia ?? target?.ia ?? 0;
 
   const realizasisThisYear = realisasiData.filter((r) => new Date(r.tanggalKegiatan).getFullYear() === activeYear);
-  const realMou = realizasisThisYear.filter((r) => r.repository?.jenisDokumen === "MOU").length;
-  const realMoa = realizasisThisYear.filter((r) => r.repository?.jenisDokumen === "MOA").length;
-  const realIa = realizasisThisYear.filter((r) => r.repository?.jenisDokumen === "IA").length;
+  const realMou = capaianData?.realisasi?.mou ?? realizasisThisYear.filter((r) => r.repository?.jenisDokumen === "MOU").length;
+  const realMoa = capaianData?.realisasi?.moa ?? realizasisThisYear.filter((r) => r.repository?.jenisDokumen === "MOA").length;
+  const realIa = capaianData?.realisasi?.ia ?? realizasisThisYear.filter((r) => r.repository?.jenisDokumen === "IA").length;
   const totalTarget = targetMou + targetMoa + targetIa;
   const totalReal = realMou + realMoa + realIa;
 
@@ -130,10 +152,10 @@ export default function CapaianKerjasamaPage() {
   const kadaluarsaCount = reposThisYear.filter((r) => r.statusDokumen === "Kadaluarsa").length;
   const tidakAktifCount = reposThisYear.filter((r) => r.statusDokumen === "TidakAktif").length;
 
-  const targetAktif = target?.aktif ?? 0;
-  const targetPerpanjangan = target?.perpanjangan ?? 0;
-  const targetKadaluarsa = target?.kadaluarsa ?? 0;
-  const targetTidakAktif = target?.tidakAktif ?? 0;
+  const targetAktif = capaianData?.target?.aktif ?? target?.aktif ?? 0;
+  const targetPerpanjangan = capaianData?.target?.perpanjangan ?? target?.perpanjangan ?? 0;
+  const targetKadaluarsa = capaianData?.target?.kadaluarsa ?? target?.kadaluarsa ?? 0;
+  const targetTidakAktif = capaianData?.target?.tidakAktif ?? target?.tidakAktif ?? 0;
 
   const trend = totalReal - totalTarget;
   const trendPct = totalTarget === 0 ? 0 : Math.round(((totalReal - totalTarget) / totalTarget) * 100);
@@ -175,6 +197,12 @@ export default function CapaianKerjasamaPage() {
                 ))}
               </div>
             </div>
+
+            {error && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Gagal memuat data capaian dari Laravel API. Pastikan backend berjalan di port 8000.
+              </div>
+            )}
 
             {/* SECTION 2: TARGET vs REALISASI OVERVIEW */}
             <div>

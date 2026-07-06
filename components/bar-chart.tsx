@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Bar,
@@ -23,6 +23,8 @@ type YearData = {
   IA: number;
 };
 
+export type DashboardYearData = YearData;
+
 // ================= COLORS =================
 const COLORS: Record<DocKey, string> = {
   MoU: "#22c55e",
@@ -30,41 +32,30 @@ const COLORS: Record<DocKey, string> = {
   IA: "#facc15",
 };
 
-// ================= MOCK REALTIME =================
-const fetchRealtimeData = (): Promise<YearData[]> =>
-  new Promise((resolve) =>
-    setTimeout(() => {
-      resolve([
-        { year: "2016", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2017", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2018", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2019", MoU: 0, MoA: 0, IA: 1 },
-        { year: "2020", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2021", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2022", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2023", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2024", MoU: 0, MoA: 0, IA: 0 },
-        { year: "2025", MoU: 0, MoA: 0, IA: 0 },
-      ]);
-    }, 1200),
-  );
+const emptyYearData = (): YearData[] => {
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: 10 }, (_, i) => ({
+    year: String(currentYear - 9 + i),
+    MoU: 0,
+    MoA: 0,
+    IA: 0,
+  }));
+};
 
 // ================= COMPONENT =================
-export function BarChart() {
+export function BarChart({
+  data,
+  loading = false,
+}: {
+  data?: YearData[];
+  loading?: boolean;
+}) {
   const [activeKeys, setActiveKeys] = useState<DocKey[]>([]);
-  const [data, setData] = useState<YearData[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchRealtimeData().then((res) => {
-      setData(res);
-      setLoading(false);
-    });
-  }, []);
+  const chartData = data && data.length > 0 ? data : emptyYearData();
 
   // ================= STATISTIK =================
   const totals = useMemo(() => {
-    const sum = (key: DocKey) => data.reduce((s, d) => s + d[key], 0);
+    const sum = (key: DocKey) => chartData.reduce((s, d) => s + d[key], 0);
 
     const visibleKeys =
       activeKeys.length > 0 ? activeKeys : ["MoU", "MoA", "IA"];
@@ -80,7 +71,7 @@ export function BarChart() {
       MoA: percent(sum("MoA")),
       IA: percent(sum("IA")),
     };
-  }, [data, activeKeys]);
+  }, [chartData, activeKeys]);
 
   // ================= SKELETON =================
   if (loading) {
@@ -132,7 +123,7 @@ export function BarChart() {
 
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <RechartsBarChart data={data}>
+          <RechartsBarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
 
             {/* X AXIS */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,7 @@ type LaporanData = {
 };
 
 type RepoDoc = {
-  id: number;
+  id: string | number;
   jenis: string;
   nomor: string;
   judul: string;
@@ -71,14 +72,15 @@ export default function LaporanKerjasamaPage() {
   const [loading, setLoading] = useState(true);
   const [raw, setRaw] = useState<RepoDoc[]>([]);
   const [tahun, setTahun] = useState<"all" | number>("all");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "SIKERMA - Laporan";
-    fetch("/api/repository/mydata", { credentials: "include" })
-      .then((r) => r.json())
-      .then((res) =>
+    apiFetch("/laporan")
+      .then((res) => {
+        const items = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
         setRaw(
-          res.map((r: any) => ({
+          items.map((r: any) => ({
             id: r.id,
             jenis: r.jenisDokumen,
             nomor: r.nomorDokumen,
@@ -92,8 +94,9 @@ export default function LaporanKerjasamaPage() {
             anggaran: r.jumlahAnggaran,
             skala: r.skalaKerjasama,
           }))
-        )
-      )
+        );
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Gagal memuat laporan"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -346,6 +349,12 @@ export default function LaporanKerjasamaPage() {
                 </div>
               </div>
             </div>
+
+            {error && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Gagal memuat data laporan dari Laravel API. Pastikan backend berjalan di port 8000.
+              </div>
+            )}
 
             {/* JENIS DOKUMEN */}
             <div>

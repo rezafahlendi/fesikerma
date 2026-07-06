@@ -1,7 +1,7 @@
 "use client";
 
+import { apiFetch } from "@/lib/api";
 import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
@@ -9,9 +9,7 @@ import { Button } from "@/components/ui/button";
 import { CloseButton } from "@/components/ui/close-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
-  RefreshCcw,
   Plus,
-  ArrowLeft,
   Download,
   Pencil,
   Trash2,
@@ -23,7 +21,7 @@ import {
 /* ================= TYPES ================= */
 
 type RealisasiKegiatan = {
-  id: number;
+  id: string;
   repositoryId?: string
   dokumen: string;
   judul: string;
@@ -36,6 +34,25 @@ type RealisasiKegiatan = {
   hasil?: string
   dokumenFile?: any[]
 };
+
+const mapRealisasi = (item: any): RealisasiKegiatan => ({
+  id: String(item.id),
+  repositoryId: item.repositoryId?.toString() || "",
+  dokumen: item.repository?.jenisDokumen || item.repository?.jenis || "-",
+  judul: item.judulKegiatan || "",
+  peserta:
+    item.repository?.mitra?.namaMitra ||
+    item.repository?.mitra?.nama ||
+    item.repository?.paraPenggiat ||
+    "-",
+  tanggal: item.tanggalKegiatan || "",
+  anggaran: Number(item.anggaran || 0),
+  bentuk: item.bentukKegiatan || "",
+  dosen: String(item.jumlahDosen ?? 0),
+  mahasiswa: String(item.jumlahMahasiswa ?? 0),
+  hasil: item.hasilKegiatan || "",
+  dokumenFile: item.dokumen || [],
+});
 
 /* ================= PAGE ================= */
 
@@ -53,7 +70,7 @@ export default function RealisasiKegiatanPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [repoOptions, setRepoOptions] = useState<any[]>([])
   const [bentukOptions, setBentukOptions] = useState<string[]>([])
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [showSuccessAdd, setShowSuccessAdd] = useState(false)
   const [showErrorAdd, setShowErrorAdd] = useState(false)
   const [showSuccessUpdate, setShowSuccessUpdate] = useState(false)
@@ -61,11 +78,12 @@ export default function RealisasiKegiatanPage() {
   const [errorMessage, setErrorMessage] = useState("")
 
   const fetchBentukKegiatan = async (repositoryId: string) => {
-    if (!repositoryId) return
-    const res = await fetch(
-      "/api/repository/" + repositoryId + "/bentuk-kegiatan"
-    )
-    const list = await res.json()
+    if (!repositoryId) {
+      setBentukOptions([])
+      return
+    }
+
+    const list = await apiFetch(`/repository/${repositoryId}/bentuk-kegiatan`)
 
     if (!Array.isArray(list)) {
       setBentukOptions([])
@@ -82,11 +100,13 @@ export default function RealisasiKegiatanPage() {
   }, [])
 
   const fetchRepository = async () => {
-    const res = await fetch("/api/repository/mydata", {
-      credentials: "include"
-    })
-    const list = await res.json()
-    setRepoOptions(list)
+    try {
+      const list = await apiFetch("/repository/mydata")
+      setRepoOptions(Array.isArray(list) ? list : [])
+    } catch (error) {
+      console.error(error)
+      setRepoOptions([])
+    }
   }
 
   useEffect(() => {
@@ -124,10 +144,9 @@ export default function RealisasiKegiatanPage() {
 
   const fetchData = async () => {
     try {
+      setLoading(true);
 
-      const res = await fetch("/api/realisasi");
-
-      const json = await res.json();
+      const json = await apiFetch("/realisasi");
 
       if (!Array.isArray(json)) {
         console.error("API response bukan array:", json);
@@ -135,26 +154,7 @@ export default function RealisasiKegiatanPage() {
         return;
       }
 
-      const mapped = json.map((r: any) => ({
-        id: Number(r.id),
-        repositoryId: r.repositoryId?.toString() || "",
-
-        dokumen: r.repository?.jenisDokumen,
-        judul: r.judulKegiatan,
-        peserta: r.repository?.mitra?.namaMitra || "-",
-
-        tanggal: r.tanggalKegiatan,
-        anggaran: Number(r.anggaran || 0),
-
-        bentuk: r.bentukKegiatan,
-        dosen: r.jumlahDosen?.toString(),
-        mahasiswa: r.jumlahMahasiswa?.toString(),
-        hasil: r.hasilKegiatan,
-
-        dokumenFile: r.dokumen || []
-      }));
-
-      setData(mapped);
+      setData(json.map(mapRealisasi));
 
     } catch (error) {
       console.error(error);
@@ -167,11 +167,9 @@ export default function RealisasiKegiatanPage() {
     if (!deleteRealisasi) return;
 
     try {
-      const res = await fetch(`/api/realisasi/${deleteRealisasi.id}`, {
+      await apiFetch(`/realisasi/${deleteRealisasi.id}`, {
         method: "DELETE",
       });
-
-      if (!res.ok) throw new Error("Gagal hapus data");
 
       // Optimistic update — hapus dari state langsung
       setData((prev) => prev.filter((r) => r.id !== deleteRealisasi.id));
@@ -252,6 +250,10 @@ export default function RealisasiKegiatanPage() {
                         file: null
                       })
 
+                      setFileRealisasi(null)
+                      setExistingDokumen([])
+                      setBentukOptions([])
+                      setErrorMessage("")
                       setShowAddModal(true)
                     }}
                   >
@@ -337,7 +339,7 @@ export default function RealisasiKegiatanPage() {
                               <div>Mahasiswa : {item.mahasiswa}</div>
                             </td>
                             <td className="px-3 py-2 text-center">
-                              {new Date(item.tanggal).toLocaleDateString("id-ID")}
+                              {item.tanggal ? new Date(item.tanggal).toLocaleDateString("id-ID") : "-"}
                             </td>
                             <td className="px-3 py-2 text-center">
                               Rp {item.anggaran.toLocaleString("id-ID")}
@@ -368,6 +370,8 @@ export default function RealisasiKegiatanPage() {
                                   })
 
                                   setExistingDokumen(item.dokumenFile || [])
+                                  setFileRealisasi(null)
+                                  fetchBentukKegiatan(item.repositoryId || "")
 
                                 }}
                               >
@@ -739,21 +743,33 @@ export default function RealisasiKegiatanPage() {
 
                     const method = editingId ? "PUT" : "POST"
 
-                    const url = editingId
-                      ? `/api/realisasi/${editingId}`
-                      : `/api/realisasi`
+                    const path = editingId
+                      ? `/realisasi/${editingId}`
+                      : "/realisasi"
 
-                    const res = await fetch(url, {
+                    const payload = {
+                      ...newRealisasi,
+                      ...(fileRealisasi
+                        ? {
+                          dokumen: [{
+                            jenis: "laporan",
+                            fileName: fileRealisasi.name,
+                            filePath: fileRealisasi.name,
+                            fileSize: fileRealisasi.size,
+                          }],
+                        }
+                        : {}),
+                    }
+
+                    await apiFetch(path, {
                       method,
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(newRealisasi),
+                      body: JSON.stringify(payload),
                     })
-
-                    if (!res.ok) throw new Error()
 
                     // Optimistic update — langsung update state tanpa fetch ulang
                     const optimisticItem: RealisasiKegiatan = {
-                      id: editingId ? Number(editingId) : Date.now(),
+                      id: editingId || String(Date.now()),
                       repositoryId: newRealisasi.repositoryId,
                       judul: newRealisasi.judul,
                       tanggal: newRealisasi.tanggal,
@@ -768,7 +784,7 @@ export default function RealisasiKegiatanPage() {
                     }
 
                     if (editingId) {
-                      setData((prev) => prev.map((r) => r.id === Number(editingId) ? { ...r, ...optimisticItem } : r))
+                      setData((prev) => prev.map((r) => r.id === editingId ? { ...r, ...optimisticItem } : r))
                       setShowSuccessUpdate(true)
                     } else {
                       setData((prev) => [optimisticItem, ...prev])
@@ -776,6 +792,9 @@ export default function RealisasiKegiatanPage() {
                     }
 
                     setShowAddModal(false)
+                    setEditingId(null)
+                    setFileRealisasi(null)
+                    setExistingDokumen([])
 
                     // Sync data di background
                     fetchData()

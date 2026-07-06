@@ -11,37 +11,37 @@ type DonutData = {
   detail: string;
 };
 
-const data: DonutData[] = [
+const defaultData: DonutData[] = [
   {
     name: "Aktif",
-    value: 5,
+    value: 0,
     color: "#22c55e",
-    detail: "MoU: 2 | MoA: 2 | IA: 1",
+    detail: "MoU: 0 | MoA: 0 | IA: 0",
   },
   {
     name: "Kadaluarsa",
-    value: 3,
+    value: 0,
     color: "#facc15",
-    detail: "MoU: 2 | MoA: 0 | IA: 1",
+    detail: "MoU: 0 | MoA: 0 | IA: 0",
   },
   {
     name: "Perpanjangan",
-    value: 2,
+    value: 0,
     color: "#3b82f6",
-    detail: "MoU: 1 | MoA: 1 | IA: 0",
+    detail: "MoU: 0 | MoA: 0 | IA: 0",
   },
   {
     name: "Tidak Aktif",
-    value: 1,
+    value: 0,
     color: "#f97316",
-    detail: "MoU: 0 | MoA: 0 | IA: 1",
+    detail: "MoU: 0 | MoA: 0 | IA: 0",
   },
 ];
 
-const TOTAL = data.reduce((sum, d) => sum + d.value, 0);
-
-export function DonutChart() {
+export function DonutChart({ data = defaultData }: { data?: DonutData[] }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const chartData = data.length > 0 ? data : defaultData;
+  const total = chartData.reduce((sum, d) => sum + d.value, 0);
 
   return (
     <Card className="border border-border">
@@ -69,7 +69,7 @@ export function DonutChart() {
                   onMouseEnter={(_, index) => setActiveIndex(index)}
                   onMouseLeave={() => setActiveIndex(null)}
                 >
-                  {data.map((entry, index) => (
+                  {chartData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={entry.color}
@@ -88,19 +88,19 @@ export function DonutChart() {
                 <>
                   <p
                     className="text-xs font-medium"
-                    style={{ color: data[activeIndex].color }}
+                    style={{ color: chartData[activeIndex].color }}
                   >
-                    {data[activeIndex].name}
+                    {chartData[activeIndex].name}
                   </p>
                   <p className="text-2xl font-bold text-foreground">
-                    {data[activeIndex].value} Data
+                    {chartData[activeIndex].value} Data
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-xs text-muted-foreground">Total dokumen</p>
                   <p className="text-2xl font-bold text-foreground">
-                    {TOTAL} Data
+                    {total} Data
                   </p>
                 </>
               )}
@@ -110,16 +110,16 @@ export function DonutChart() {
             {activeIndex !== null && (
               <div
                 className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-xs text-white shadow-md transition-colors"
-                style={{ backgroundColor: data[activeIndex].color }}
+                style={{ backgroundColor: chartData[activeIndex].color }}
               >
-                {data[activeIndex].name} : {data[activeIndex].value} Data
+                {chartData[activeIndex].name} : {chartData[activeIndex].value} Data
               </div>
             )}
           </div>
 
           {/* LEGEND (HOVER = AKTIFKAN DONUT) */}
           <div className="mt-6 w-full space-y-4">
-            {data.map((item, index) => {
+            {chartData.map((item, index) => {
               const isActive = activeIndex === index;
 
               return (

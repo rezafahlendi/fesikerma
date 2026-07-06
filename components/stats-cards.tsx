@@ -1,34 +1,56 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, FileCheck, File } from "lucide-react";
 
-const stats = [
+export type StatsCardsData = {
+  mou: number;
+  moa: number;
+  ia: number;
+  activeMou?: number;
+  activeMoa?: number;
+  activeIa?: number;
+};
+
+const defaultData: StatsCardsData = {
+  mou: 0,
+  moa: 0,
+  ia: 0,
+  activeMou: 0,
+  activeMoa: 0,
+  activeIa: 0,
+};
+
+function buildStats(data: StatsCardsData) {
+  return [
   {
     icon: FileText,
     label: "DOKUMEN MOU",
-    value: "0 Data",
-    activeCount: "0 Data Aktif",
+    value: `${data.mou} Data`,
+    activeCount: `${data.activeMou ?? 0} Data Aktif`,
     color: "text-chart-1",
     bgColor: "bg-chart-1/10",
   },
   {
     icon: FileCheck,
     label: "DOKUMEN MOA",
-    value: "0 Data",
-    activeCount: "0 Data Aktif",
+    value: `${data.moa} Data`,
+    activeCount: `${data.activeMoa ?? 0} Data Aktif`,
     color: "text-chart-2",
     bgColor: "bg-chart-2/10",
   },
   {
     icon: File,
     label: "DOKUMEN IA",
-    value: "1 Data",
-    activeCount: "0 Data Aktif",
+    value: `${data.ia} Data`,
+    activeCount: `${data.activeIa ?? 0} Data Aktif`,
     color: "text-chart-3",
     bgColor: "bg-chart-3/10",
   },
-];
+  ];
+}
 
-export function StatsCards() {
+export function StatsCards({ data = defaultData }: { data?: StatsCardsData }) {
+  const stats = buildStats(data);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {stats.map((stat, index) => {

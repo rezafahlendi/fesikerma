@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/api";
 import { useState, useMemo, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
@@ -50,8 +51,7 @@ export default function TargetKerjasamaPage() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch("/api/target-kerjasama");
-      const json = await res.json();
+      const json = await apiFetch("/target-kerjasama");
       if (Array.isArray(json)) setData(json);
     } catch (e) {
       console.error(e);
@@ -92,7 +92,7 @@ export default function TargetKerjasamaPage() {
 
   const handleSaveAdd = async () => {
     try {
-      const res = await fetch("/api/target-kerjasama", {
+      const res = await apiFetch("/target-kerjasama", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newTarget),
@@ -110,11 +110,10 @@ export default function TargetKerjasamaPage() {
   const handleSaveEdit = async () => {
     if (!selectedTarget) return;
     try {
-      const res = await fetch(`/api/target-kerjasama/${selectedTarget.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectedTarget),
-      });
+      const res = await apiFetch(`/target-kerjasama/${selectedTarget.id}`, {
+  method: "PUT",
+  body: JSON.stringify(selectedTarget),
+});
       if (!res.ok) throw new Error();
       setShowEditModal(false);
       setSelectedTarget(null);
@@ -128,7 +127,7 @@ export default function TargetKerjasamaPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/target-kerjasama/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/target-kerjasama/${deleteTarget.id}`, {method: "DELETE",});
       if (!res.ok) throw new Error();
       setData((prev) => prev.filter((t) => t.id !== deleteTarget.id));
       setDeleteTarget(null);
